@@ -39,6 +39,8 @@ func ProxyRequestHandler(proxy *httputil.ReverseProxy, jukeboxSetCommands comman
 	return func(w http.ResponseWriter, r *http.Request) {
 		if isJukeboxControlSet(r) {
 			for _, jukeboxSetCommand := range jukeboxSetCommands {
+				log.Printf("running: %v", jukeboxSetCommand)
+
 				cmd := exec.Command(jukeboxSetCommand[0], jukeboxSetCommand[1:]...)
 				cmd.Start()
 			}
