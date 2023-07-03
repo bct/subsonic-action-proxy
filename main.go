@@ -2,10 +2,11 @@ package main
 
 import (
 	"flag"
-	"github.com/elazarl/goproxy"
 	"github.com/kballard/go-shellquote"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os/exec"
 	"strings"
 )
@@ -30,22 +31,25 @@ func (cmds *commands) Set(value string) error {
 	return nil
 }
 
-func handleJukeboxControl(jukeboxSetCommands commands) func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-	return func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		for _, jukeboxSetCommand := range jukeboxSetCommands {
-			cmd := exec.Command(jukeboxSetCommand[0], jukeboxSetCommand[1:]...)
-			cmd.Start()
-		}
-
-		return r, nil
-	}
-}
-
-func isJukeboxControlSet(r *http.Request, ctx *goproxy.ProxyCtx) bool {
+func isJukeboxControlSet(r *http.Request) bool {
 	return r.URL.Path == `/rest/jukeboxControl.view` && r.FormValue("action") == "set"
 }
 
+func ProxyRequestHandler(proxy *httputil.ReverseProxy, jukeboxSetCommands commands) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if isJukeboxControlSet(r) {
+			for _, jukeboxSetCommand := range jukeboxSetCommands {
+				cmd := exec.Command(jukeboxSetCommand[0], jukeboxSetCommand[1:]...)
+				cmd.Start()
+			}
+		}
+
+		proxy.ServeHTTP(w, r)
+	}
+}
+
 func main() {
+	subsonicAddr := flag.String("subsonic-addr", "", "address of subsonic server")
 	listenAddr := flag.String("listen-addr", "0.0.0.0:8080", "listen address")
 
 	var jukeboxSetCommands commands
@@ -53,9 +57,18 @@ func main() {
 
 	flag.Parse()
 
-	proxy := goproxy.NewProxyHttpServer()
+	if *subsonicAddr == "" {
+		log.Fatal("subsonic-addr must be provided")
+	}
 
-	proxy.OnRequest(goproxy.ReqConditionFunc(isJukeboxControlSet)).DoFunc(handleJukeboxControl(jukeboxSetCommands))
+	subsonicUrl, err := url.Parse(*subsonicAddr)
+	if err != nil {
+		log.Fatalf("subsonic-addr %q is not a valid URL", *subsonicAddr)
+	}
 
-	log.Fatal(http.ListenAndServe(*listenAddr, proxy))
+	proxy := httputil.NewSingleHostReverseProxy(subsonicUrl)
+
+	http.HandleFunc("/", ProxyRequestHandler(proxy, jukeboxSetCommands))
+
+	log.Fatal(http.ListenAndServe(*listenAddr, nil))
 }
