@@ -37,6 +37,15 @@ func (cmds *commands) Set(value string) error {
 	return nil
 }
 
+func executeCommand(cmd command) {
+	log.Printf("running %q", cmd.String())
+
+	execCmd := exec.Command(cmd[0], cmd[1:]...)
+	execCmd.Stdout = os.Stdout
+	execCmd.Stderr = os.Stderr
+	execCmd.Run()
+}
+
 func isJukeboxControlSet(r *http.Request) bool {
 	return r.URL.Path == `/rest/jukeboxControl.view` && r.FormValue("action") == "set"
 }
@@ -45,12 +54,7 @@ func ProxyRequestHandler(proxy *httputil.ReverseProxy, jukeboxSetCommands comman
 	return func(w http.ResponseWriter, r *http.Request) {
 		if isJukeboxControlSet(r) {
 			for _, jukeboxSetCommand := range jukeboxSetCommands {
-				log.Printf("running %q", jukeboxSetCommand.String())
-
-				cmd := exec.Command(jukeboxSetCommand[0], jukeboxSetCommand[1:]...)
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				cmd.Start()
+				go executeCommand(jukeboxSetCommand)
 			}
 		}
 
