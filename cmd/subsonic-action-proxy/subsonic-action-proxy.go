@@ -7,16 +7,22 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"os/exec"
 	"strings"
 )
 
-type commands [][]string
+type commands []command
+type command []string
+
+func (cmd command) String() string {
+	return shellquote.Join(cmd...)
+}
 
 func (cmds commands) String() string {
 	var strs []string
 	for _, cmd := range cmds {
-		strs = append(strs, shellquote.Join(cmd...))
+		strs = append(strs, cmd.String())
 	}
 	return strings.Join(strs, ", ")
 }
@@ -39,9 +45,11 @@ func ProxyRequestHandler(proxy *httputil.ReverseProxy, jukeboxSetCommands comman
 	return func(w http.ResponseWriter, r *http.Request) {
 		if isJukeboxControlSet(r) {
 			for _, jukeboxSetCommand := range jukeboxSetCommands {
-				log.Printf("running: %v", jukeboxSetCommand)
+				log.Printf("running %q", jukeboxSetCommand.String())
 
 				cmd := exec.Command(jukeboxSetCommand[0], jukeboxSetCommand[1:]...)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
 				cmd.Start()
 			}
 		}
@@ -72,5 +80,6 @@ func main() {
 
 	http.HandleFunc("/", ProxyRequestHandler(proxy, jukeboxSetCommands))
 
+	log.Printf("Starting server on %q", *listenAddr)
 	log.Fatal(http.ListenAndServe(*listenAddr, nil))
 }
