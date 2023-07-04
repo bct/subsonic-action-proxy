@@ -6,9 +6,17 @@ import (
 )
 
 func TestCommandParsing(t *testing.T) {
-	var parsedCommands commands
-	parsedCommands.Set("/bin/onkyo-ri-send-command 0 26 0xd9 0x20")
-	parsedCommands.Set("/bin/sh -c 'echo success; echo done'")
+  testCases := []string {
+    "/bin/onkyo-ri-send-command 0 26 0xd9 0x20",
+    "/bin/sh -c 'echo success; echo done'",
+  }
+
+	var parsedCommands []command
+  for i := range testCases {
+    command := command{}
+    command.Set(testCases[i])
+    parsedCommands = append(parsedCommands, command)
+  }
 
 	expected := [][]string{
 		{"/bin/onkyo-ri-send-command", "0", "26", "0xd9", "0x20"},

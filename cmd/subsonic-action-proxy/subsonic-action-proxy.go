@@ -19,23 +19,13 @@ func (cmd command) String() string {
 	return shellquote.Join(cmd...)
 }
 
-type commands []command
-
-func (cmds commands) String() string {
-	var strs []string
-	for _, cmd := range cmds {
-		strs = append(strs, cmd.String())
-	}
-	return strings.Join(strs, ", ")
-}
-
-func (cmds *commands) Set(value string) error {
-	cmd, err := shellquote.Split(value)
+func (cmd *command) Set(value string) error {
+	splitCmd, err := shellquote.Split(value)
 	if err != nil {
 		return err
 	}
 
-	*cmds = append(*cmds, cmd)
+	*cmd = splitCmd
 	return nil
 }
 
@@ -99,12 +89,10 @@ func RpcRequestHandler(rpc rpc) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-func ProxyRequestHandler(proxy *httputil.ReverseProxy, jukeboxSetCommands commands) func(http.ResponseWriter, *http.Request) {
+func ProxyRequestHandler(proxy *httputil.ReverseProxy, jukeboxSetCommand command) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if isJukeboxControlSet(r) {
-			for _, jukeboxSetCommand := range jukeboxSetCommands {
-				go executeCommand(jukeboxSetCommand)
-			}
+      go executeCommand(jukeboxSetCommand)
 		}
 
 		proxy.ServeHTTP(w, r)
@@ -115,8 +103,8 @@ func main() {
 	subsonicAddr := flag.String("subsonic-addr", "", "address of subsonic server")
 	listenAddr := flag.String("listen-addr", "0.0.0.0:8080", "listen address")
 
-	var jukeboxSetCommands commands
-	flag.Var(&jukeboxSetCommands, "jukebox-set-command", "command to run when jukeboxControl 'set' is called\n(can be specified multiple times)")
+	var jukeboxSetCommand command
+	flag.Var(&jukeboxSetCommand, "jukebox-set-command", "command to run when jukeboxControl 'set' is called")
 
 	var rpcs rpcs
 	flag.Var(&rpcs, "add-rpc", "form: \"path command\", e.g. \"/rpc/volume-up /bin/volume.sh +10\".\nregisters a command to that will be run on a POST request to the given path.\n(can be specified multiple times)")
@@ -134,7 +122,7 @@ func main() {
 
 	proxy := httputil.NewSingleHostReverseProxy(subsonicUrl)
 
-	http.HandleFunc("/", ProxyRequestHandler(proxy, jukeboxSetCommands))
+	http.HandleFunc("/", ProxyRequestHandler(proxy, jukeboxSetCommand))
 
 	for i := range rpcs {
 		rpc := rpcs[i]
